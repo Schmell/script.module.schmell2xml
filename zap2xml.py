@@ -4,6 +4,7 @@ import time
 from HTMLParser import HTMLParser
 from htmlentitydefs import name2codepoint
 import codecs
+
 import platform
 import sys
 import os
@@ -15,12 +16,14 @@ import calendar
 import re
 import gzip
 import json
+import simplejson
 import cookielib
 import urllib
 import inspect
 import urllib2
 import datetime
 import ast
+
 """
 import requests
 from requests.auth import HTTPBasicAuth
@@ -35,6 +38,7 @@ XML::LibXML
 libxml2
 lxml
 """
+
 
 class Zap2xmllog():
     debug = False
@@ -51,6 +55,7 @@ class Zap2xmllog():
 
     def setQuiet(self,x=False):
         self.quiet = x
+
 
     def pout (self, pstr, log_type='none',printOut = True, func = False):
         if func:
@@ -88,6 +93,19 @@ if re.search('openelec', platform.uname()[1], re.IGNORECASE) or os.path.exists(k
         sys.path.append(kodiPath + mechLib)
     else: log.pout("Mechanize addon not installed error",'error')
 import mechanize
+sys.path.append(kodiPath + "script.module.schmell2xml/namedentities")
+from namedentities import *
+#log.pout("Test", 'debug', func=True)
+# try:
+#  homeDir = os.environ['HOME']
+# except Exception as e:
+#     homeDir = None
+# try:
+#  homeDir = os.environ['USERPROFILE']
+# except Exception as e:
+#  homeDir = None
+# if homeDir is None : homeDir = homeDir='.'
+# confFile = homeDir + '/.zap2xmlrc'
 
 confFile = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".zap2xmlrc")
 
@@ -102,17 +120,23 @@ cacheDir = 'cache'
 lang = u'en'
 userEmail = None
 password = None
+
 proxy = None
 postalcode = None
 lineupId = None
+
 sleeptime = 0
 shiftMinutes = 0
+
 outputXTVD = None
 includeXMLTV = None
 lineuptype = None
 lineupname = None
 lineuplocation = None
+
+
 sTBA = "\\bTBA\\b|To Be Announced"
+
 urlRoot = 'http://tvschedule.zap2it.com/tvlistings/'
 tvgurlRoot = 'http://mobilelistings.tvguide.com/'
 tvgMapiRoot = 'http://mapi.tvguide.com/'
@@ -594,6 +618,7 @@ def login():
         log.pout("Connecting with lineupId \"" + zlineupId + "\" (" +  str(time.localtime(time.time())) +  ")\n",'info')
 
 
+
 # s/\s+$// match white space at end of line one or more times and replace with nothing
 # shift function args
 def rtrim (shift):
@@ -714,7 +739,7 @@ class MyHTMLParser(HTMLParser):
         global on_span_zc_pg_t
         global tba, sTBA, stations, cs
         global on_p_zc_pg_d,on_li_zc_ic
-        # print "Data     :", data
+        #print "Data     :", repr(numeric_entities(data))
 
         if cbdata == 'title':       #set in on_a assume not special chars for now
             self.handling_data = True
@@ -825,8 +850,10 @@ def parseJSOND(fn):
         b = f.read()
         f.close()
     # todo figure out this re
+    log.pout(b)
     b = re.sub("^.+?\=","",b,re.IGNORECASE|re.MULTILINE)
-    t = json.loads(b)
+    
+    t = simplejson.loads(b)
     p=t["program"]
     #todo remove xtra var like sn
     if "seasonNumber" in p:
@@ -866,7 +893,7 @@ def parseJSOND(fn):
     if "credits" in p:
         credits = p["credits"]
         i = 1
-        if"credits" not in programs[cp]:
+        if "credits" not in programs[cp]:
             programs[cp]["credits"] = {}
         for g in credits:
             programs[cp]["credits"][g] = i
@@ -879,6 +906,7 @@ def parseJSOND(fn):
             tsr -= 1
             tsr += 0.5
         programs[cp]["starRating"] = str(tsr)
+
 
 
 def parseTVGFavs(data):
@@ -1155,6 +1183,7 @@ def timezone(t) :
 #sub min ($$) { $_[$_[0] > $_[1]] } #todo
 
 
+
 def incXML (st, en, fh):
     xf = open(includeXMLTV)
     start_pat = False
@@ -1203,12 +1232,13 @@ def enc(strng):
     global options
     t = strng
     if "-E" not in options:
-        t = re.sub("&[^#]","&amp; ",t)
-        t = re.sub("\"","&quot;",t)
-        t = re.sub("\'","&apos;",t)
-        t = re.sub("<","&lt;",t)
-        t = re.sub(">","&gt;",t)
-        t = re.sub(u"á","&#225;",t)
+        t = re.sub("``","&quot;",t) #still required as screener gives weird open quotes
+        t = re.sub("\'\'","&quot;",t) #still required as screener gives wierd close quotes
+        t = repr(hex_entities(t, 'html.escape'))
+        if t.startswith('\'') and t.endswith('\''):
+            t = t[1:-1]
+        if t.startswith('"') and t.endswith('"'):
+            t = t[1:-1]
     else:
         if re.search("amp",options["-E"]): t = re.sub("&[^#]","&amp; ",t)
         if re.search("quot",options["-E"]): t = re.sub("\"","&quot;",t)
@@ -1218,7 +1248,6 @@ def enc(strng):
     # if "-e" in options:
     #     t = re.sub("([^\x20-\x7F])",hex2dec_e,t)  # handled by html parser make it unicode
     #     #$t =~ s/([^\x20-\x7F])/'&#' . ord($1) . ';'/gse;
-
 
     return t # unicodeData
 
@@ -1323,9 +1352,9 @@ def printProgrammes(fh):
 
         if "description" in programs[p] and programs[p]["description"] is not None:
             xdets = ""
+            tmp = enc(programs[p]["description"])
             if "-X" in options:
                 xdets = addXDetails(programs[p], schedule[station][s])
-                tmp = enc(programs[p]["description"])
                 fh.write("\t\t<desc lang=\"" + lang + "\">" + xdets + "</desc>\n")
             else:
                 fh.write("\t\t<desc lang=\"" + lang + "\">" + tmp + "</desc>\n")
@@ -1374,13 +1403,13 @@ def printProgrammes(fh):
             xe = int(e) - 1
             if int(ss) > 0 or int(e) > 0:
                 fh.write("\t\t<episode-num system=\"onscreen\">" + sf + ef + "</episode-num>\n")
-                fh.write("\t\t<episode-num system=\"xmltv_ns\">" + ("%d" % xs) +  "." + ("%d" % xe) + ".</episode-num>\n")
-
         dd_prog_id = str(p)
         tmp = re.search("^(..\d{8})(\d{4})",dd_prog_id)
         if tmp:
             dd_prog_id = "%s.%s" % (tmp.group(1),tmp.group(2))
             fh.write("\t\t<episode-num system=\"dd_progid\">" + dd_prog_id  + "</episode-num>\n")
+        if xs is not None and xe is not None and xs >= 0 and xe >= 0:
+            fh.write("\t\t<episode-num system=\"xmltv_ns\">" + ("%d" % xs) +  "." + ("%d" % xe) + ".</episode-num>\n")
         if "quality" in  schedule[station][s]:
             fh.write("\t\t<video>\n")
             fh.write("\t\t\t<aspect>16:9</aspect>\n")
@@ -1420,8 +1449,10 @@ def printProgrammes(fh):
 
 
 def addXDetails(program, schedule):
+
     ratings = ""
-    date= ""
+    date = ""
+    myear = ""
     new = ""
     live = ""
     hd = ""
@@ -1433,15 +1464,15 @@ def addXDetails(program, schedule):
     prog = ""
     plot= ""
     descsort = ""
-    bullet = u" \u2022 "
-    hyphen = u" \u2013 "
+    bullet = u"\u2022"
+    hyphen = u"\u2013"
     newLine = "\n"
 
     def getSortName(opt):
         return {
             1: bullet,
-            2: hyphen,
-            3: newLine,
+            2: newLine,
+            3: hyphen,
             4: plot,
             5: new,
             6: hd,
@@ -1453,6 +1484,7 @@ def addXDetails(program, schedule):
             12: epis,
             13: episqts,
             14: cast,
+            15: myear,
         }.get(opt, None)
 
     def cleanSortList(optList):
@@ -1467,6 +1499,7 @@ def addXDetails(program, schedule):
             if cleanList[-1] <= 3:
                 del cleanList[-1]
 
+        #print cleanList
         return cleanList
 
     def makeDescsortList(optList):
@@ -1475,6 +1508,7 @@ def addXDetails(program, schedule):
         cleanedList = cleanSortList(optList)
         for opt in cleanedList:
             thisOption = getSortName(int(opt))
+            #print "opt: "+str(opt)+" this: "+str(thisOption)+" last: "+str(lastOption)
             if int(opt) <= 3 and lastOption <= 3:
                 lastOption = int(opt)
             elif thisOption and lastOption:
@@ -1484,18 +1518,24 @@ def addXDetails(program, schedule):
                 lastOption = int(opt)
 
         return sortOrderList
-
+    startTime = convTime(schedule["time"])
+    if "originalAirDate" in program and not new and not live:
+        origdate = convDateLocal(program["originalAirDate"])
+        finaldate = datetime.datetime.strptime(origdate, "%Y%m%d").strftime('%B %d, %Y')
+        date = "First aired: " + finaldate
     if "movie_year" in program:
-        date = "Released: " + program["movie_year"]
+        myear = "Released: " + program["movie_year"]
     if "rating" in program:
         ratings = enc(program["rating"])
     if "new" in schedule:
         new = "NEW"
+        origdate = startTime
+        finaldate = datetime.datetime.strptime(origdate, "%Y%m%d%H%M%S").strftime('%B %d, %Y')
+        date = "First aired: " + finaldate
     if "live" in schedule:
         live = "LIVE"
-    if "originalAirDate" in program and not new and not live:
-        origdate = enc(convDateLocal(program["originalAirDate"]))
-        finaldate = datetime.datetime.strptime(origdate, "%Y%m%d").strftime('%B %d, %Y')
+        origdate = startTime
+        finaldate = datetime.datetime.strptime(origdate, "%Y%m%d%H%M%S").strftime('%B %d, %Y')
         date = "First aired: " + finaldate
     if "quality" in schedule:
         hd = schedule['quality']
@@ -1503,27 +1543,39 @@ def addXDetails(program, schedule):
         cc = schedule['cc']
     if "seasonNum" in program and "episodeNum" in program:
         ss = program["seasonNum"]
-        sf =  "Season %0*d " % (max(2, len(str(ss))), int(ss))
+        sf = "Season %0*d" % (max(2, len(str(ss))), int(ss))
         e = program["episodeNum"]
         ef = "Episode %0*d" % (max(2, len(str(e))), int(e))
-        season = sf + " " + ef
+        season = sf + " - " + ef
+
     if "credits" in program:
-        for item in program['credits']:
-            cast = "Cast: "+", "+item  
+        #sortThing1 = str(program)
+        #sortThing2 = "credits"
+        cast = "Cast: "
+        castlist = ""
+        prev = None
+        for g in program["credits"]:
+            if prev is None:
+                castlist = enc(g)
+                prev = g
+            else:
+                castlist = castlist + ", " + enc(g)
+            cast = cast + castlist
+
     if 'title' in program:
-        prog = program['title']
+        prog = enc(program['title'])
     if 'episode' in program:
-        epis = program['episode']
-        episqts = '\"' + program['episode'] + '\"'
+        epis = enc(program['episode'])
+        episqts = '\"' + enc(program['episode']) + '\"'
     if 'description' in program:
-        plot = program['description']
+        plot = enc(program['description'])
     if "-V" in options:
         optList = ast.literal_eval(options["-V"])
-        descsort = "".join(makeDescsortList(optList))
+        descsort = " ".join(makeDescsortList(optList))
     else:
         descDefault = [4,1,5,1,6,1,7,1,8,1,9,1,10]
-        descsort = "".join(makeDescsortList(descDefault))
-            
+        descsort = " ".join(makeDescsortList(descDefault))
+
     return descsort
 
 def printHeaderXTVD(fh, enc):
@@ -1795,6 +1847,7 @@ def option_parse():
     if "-S" in options: sleeptime = float(options["-S"])
     if "-m" in options: shiftMinutes = int(options["-m"])
     if "-V" in options: descsort = options["-V"]
+
 
 
 def printHelp ():
